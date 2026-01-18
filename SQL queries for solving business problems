@@ -1,0 +1,129 @@
+SELECT
+  MIN(price) AS min_price,
+  MAX(price) AS max_price,
+  AVG(price) AS avg_price
+FROM indian_flights_no_outliers;
+
+select * from indian_flights_no_outliers;
+
+# 1. which airline offers the lowest average ticket price
+SELECT
+  airline,
+  ROUND(AVG(price), 0) AS avg_price,
+  COUNT(*) AS total_flights
+FROM indian_flights_no_outliers
+GROUP BY airline
+ORDER BY avg_price ASC;
+
+
+# 2. which airlines has the highest average ticket price ?
+SELECT
+  airline,
+  ROUND(AVG(price), 0) AS avg_price,
+  COUNT(*) AS total_flights
+FROM indian_flights_no_outliers
+GROUP BY airline
+ORDER BY avg_price desc;
+
+# 3. How does the number of stops affect flight price ?
+SELECT
+  total_stops,
+  ROUND(AVG(price), 0) AS avg_price
+FROM indian_flights_no_outliers
+GROUP BY total_stops;
+
+# 4. which routes generates the highest revenue potential 
+SELECT
+    route,
+    COUNT(*) AS total_flights,
+    ROUND(AVG(CAST(price AS DOUBLE)), 0) AS avg_price,
+    ROUND(COUNT(*) * AVG(CAST(price AS DOUBLE)), 0) AS revenue_potential
+FROM indian_flights_no_outliers
+WHERE route IS NOT NULL
+GROUP BY route
+HAVING COUNT(*) >= 5
+ORDER BY revenue_potential DESC
+LIMIT 10;
+
+# 5 . which routes have the highest number of flights ?
+SELECT
+    route,
+    COUNT(*) AS total_flights
+FROM indian_flights_no_outliers
+WHERE route IS NOT NULL
+GROUP BY route
+ORDER BY total_flights DESC
+LIMIT 10;
+
+#6.is there significant price difference between non stop and connecting flights ?
+SELECT
+    CASE
+        WHEN total_stops = 'non-stop' THEN 'Non-stop'
+        ELSE 'Connecting'
+    END AS flight_type,
+    ROUND(AVG(CAST(price AS DOUBLE)), 0) AS avg_price,
+    COUNT(*) AS total_flights
+FROM indian_flights_no_outliers
+WHERE total_stops IS NOT NULL
+GROUP BY
+    CASE
+        WHEN total_stops = 'non-stop' THEN 'Non-stop'
+        ELSE 'Connecting'
+    END;
+    #7. which airline dominates high demand routes 
+    SELECT
+    route,
+    airline,
+    COUNT(*) AS total_flights
+FROM indian_flights_final
+GROUP BY route, airline
+ORDER BY total_flights DESC
+LIMIT 10;
+
+#8. how much does price vary for the scheme routes accross different airlines ?
+SELECT
+    route,
+    MIN(CAST(price AS INTEGER)) AS min_price,
+    MAX(CAST(price AS INTEGER)) AS max_price,
+    (MAX(CAST(price AS INTEGER)) - MIN(CAST(price AS INTEGER))) AS price_variation
+FROM indian_flights_final
+GROUP BY route
+HAVING COUNT(DISTINCT airline) > 1
+ORDER BY price_variation DESC
+LIMIT 10;
+
+#9. which cities act as major aviation hosts 
+
+SELECT
+    city,
+    SUM(total_flights) AS total_traffic
+FROM (
+    SELECT source AS city, COUNT(*) AS total_flights
+    FROM indian_flights_final
+    GROUP BY source
+
+    UNION ALL
+
+    SELECT destination AS city, COUNT(*) AS total_flights
+    FROM indian_flights_final
+    GROUP BY destination
+) t
+GROUP BY city
+ORDER BY total_traffic DESC
+LIMIT 10;
+
+
+#10. which airline provides the best value for money ?
+
+SELECT
+    airline,
+    COUNT(*) AS total_flights,
+    AVG(CAST(price AS INTEGER)) AS avg_price
+FROM indian_flights_final
+WHERE price IS NOT NULL
+GROUP BY airline
+ORDER BY avg_price ASC;
+
+
+
+select * from indian_flights_final;
