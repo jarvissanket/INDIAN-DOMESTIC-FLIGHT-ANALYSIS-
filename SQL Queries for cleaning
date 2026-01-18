@@ -1,0 +1,217 @@
+SELECT
+  COUNT(*) AS total_rows,
+
+  SUM(CASE WHEN airline IS NULL OR TRIM(airline) = '' THEN 1 ELSE 0 END) AS airline_missing,
+  SUM(CASE WHEN date_of_journey IS NULL OR TRIM(date_of_journey) = '' THEN 1 ELSE 0 END) AS date_missing,
+  SUM(CASE WHEN source IS NULL OR TRIM(source) = '' THEN 1 ELSE 0 END) AS source_missing,
+  SUM(CASE WHEN destination IS NULL OR TRIM(destination) = '' THEN 1 ELSE 0 END) AS destination_missing,
+  SUM(CASE WHEN route IS NULL OR TRIM(route) = '' THEN 1 ELSE 0 END) AS route_missing,
+  SUM(CASE WHEN dep_time IS NULL OR TRIM(dep_time) = '' THEN 1 ELSE 0 END) AS dep_time_missing,
+  SUM(CASE WHEN arrival_time IS NULL OR TRIM(arrival_time) = '' THEN 1 ELSE 0 END) AS arrival_time_missing,
+  SUM(CASE WHEN total_stops IS NULL OR TRIM(total_stops) = '' THEN 1 ELSE 0 END) AS stops_missing,
+  SUM(CASE WHEN price IS NULL OR TRIM(price) = '' THEN 1 ELSE 0 END) AS price_missing,
+  SUM(CASE WHEN additional_info IS NULL OR TRIM(additional_info) = '' THEN 1 ELSE 0 END) AS additional_info_missing
+FROM indian_flights_final;
+SELECT *
+FROM indian_flights_final
+WHERE route IS NULL
+   OR TRIM(route) = ''
+   OR total_stops IS NULL
+   OR TRIM(total_stops) = '';
+   
+   CREATE OR REPLACE VIEW indian_flights_cleaned AS
+SELECT
+  airline,
+  date_of_journey,
+  source,
+  destination,
+  route,
+  dep_time,
+  arrival_time,
+  total_stops,
+  price,
+  COALESCE(NULLIF(TRIM(additional_info), ''), 'Not Available') AS additional_info
+FROM indian_flights_final
+WHERE
+  route IS NOT NULL
+  AND TRIM(route) <> ''
+  AND total_stops IS NOT NULL
+  AND TRIM(total_stops) <> '';
+  
+  SELECT
+  airline,
+  date_of_journey,
+  source,
+  destination,
+  route,
+  dep_time,
+  arrival_time,
+  price,
+  COUNT(*) AS duplicate_count
+FROM indian_flights_cleaned
+GROUP BY
+  airline,
+  date_of_journey,
+  source,
+  destination,
+  route,
+  dep_time,
+  arrival_time,
+  price
+HAVING COUNT(*) > 1;
+
+SELECT
+  SUM(duplicate_count - 1) AS total_duplicate_rows
+FROM (
+  SELECT
+    COUNT(*) AS duplicate_count
+  FROM indian_flights_cleaned
+  GROUP BY
+    airline,
+    date_of_journey,
+    source,
+    destination,
+    route,
+    dep_time,
+    arrival_time,
+    price
+  HAVING COUNT(*) > 1
+);
+CREATE OR REPLACE VIEW indian_flights_deduped AS
+SELECT *
+FROM (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY
+             airline,
+             date_of_journey,
+             source,
+             destination,
+             route,
+             dep_time,
+             arrival_time,
+             price
+           ORDER BY date_of_journey
+         ) AS rn
+  FROM indian_flights_cleaned
+)
+WHERE rn = 1;
+SELECT
+  airline,
+  date_of_journey,
+  source,
+  destination,
+  route,
+  dep_time,
+  arrival_time,
+  price,
+  COUNT(*) AS duplicate_count
+FROM indian_flights_deduped
+GROUP BY
+  airline,
+  date_of_journey,
+  source,
+  destination,
+  route,
+  dep_time,
+  arrival_time,
+  price
+HAVING COUNT(*) > 1;
+
+SELECT COUNT(*) AS invalid_price_rows
+FROM indian_flights_deduped
+WHERE price <= 0;
+
+
+SELECT COUNT(*) AS invalid_price_rows
+FROM indian_flights_deduped
+WHERE CAST(price AS INTEGER) <= 0;
+
+SELECT price
+FROM indian_flights_deduped
+WHERE CAST(price AS INTEGER) <= 0
+LIMIT 10;
+
+DESCRIBE indian_flights_final_clean;
+
+
+
+
+SHOW TABLES;
+
+DESCRIBE indian_flights_final;
+
+CREATE OR REPLACE VIEW indian_flights_numeric AS
+SELECT
+  airline,
+  date_of_journey,
+  source,
+  destination,
+  route,
+  dep_time,
+  arrival_time,
+  total_stops,
+
+  CAST(price AS INTEGER) AS price,
+
+  additional_info
+FROM indian_flights_final
+WHERE regexp_like(price, '^[0-9]+$')
+  AND CAST(price AS INTEGER) > 0;
+  DESCRIBE indian_flights_final;
+  DESCRIBE indian_flights_numeric;
+  SELECT
+  MIN(price) AS min_price,
+  MAX(price) AS max_price,
+  AVG(price) AS avg_price
+FROM indian_flights_numeric;
+WITH stats AS (
+  SELECT
+    approx_percentile(price, 0.25) AS q1,
+    approx_percentile(price, 0.75) AS q3
+  FROM indian_flights_numeric
+)
+SELECT
+  q1,
+  q3,
+  (q3 - q1) AS iqr,
+  (q1 - 1.5 * (q3 - q1)) AS lower_bound,
+  (q3 + 1.5 * (q3 - q1)) AS upper_bound
+FROM stats;
+
+
+
+WITH bounds AS (
+  SELECT
+    approx_percentile(price, 0.25) AS q1,
+    approx_percentile(price, 0.75) AS q3
+  FROM indian_flights_numeric
+)
+SELECT
+  COUNT(*) AS outlier_count
+FROM indian_flights_numeric, bounds
+WHERE price < (q1 - 1.5 * (q3 - q1))
+   OR price > (q3 + 1.5 * (q3 - q1));
+   
+   
+   
+   CREATE OR REPLACE VIEW indian_flights_no_outliers AS
+WITH bounds AS (
+  SELECT
+    approx_percentile(price, 0.25) AS q1,
+    approx_percentile(price, 0.75) AS q3
+  FROM indian_flights_numeric
+)
+SELECT *
+FROM indian_flights_numeric, bounds
+WHERE price BETWEEN
+      (q1 - 1.5 * (q3 - q1))
+  AND (q3 + 1.5 * (q3 - q1));
+
+
+
+SELECT
+  MIN(price) AS min_price,
+  MAX(price) AS max_price,
+  AVG(price) AS avg_price
+FROM indian_flights_no_outliers;
